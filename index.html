@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#faf9f6" />
+    <meta name="description" content="כל האירועים שלך, במקום אחד. לוח שנה אישי עם תזכורות." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <title>זמנית — לוח השנה שלך</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="ניווט ראשי">
+        <a class="brand" href="#" aria-label="זמנית — עמוד הבית">
+          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="4" y="7" width="24" height="21" rx="7" fill="currentColor" opacity=".14"/><path d="M10 4v6M22 4v6M5 13h22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m12.5 20 2.4 2.4 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span class="brand-name">זמנית<span class="brand-period">.</span></span>
+        </a>
+
+        <div class="sidebar-section">
+          <div class="section-label">התכנון שלי</div>
+          <button class="nav-link active" data-view="list"><span class="nav-icon">▤</span>כל האירועים<span class="nav-count" id="event-count">0</span></button>
+          <button class="nav-link" data-view="calendar"><span class="nav-icon">▦</span>לוח שנה</button>
+          <button class="nav-link" data-view="upcoming"><span class="nav-icon">◷</span>בקרוב</button>
+        </div>
+
+        <div class="sidebar-section calendar-section">
+          <div class="section-heading"><span class="section-label">הלוחות שלי</span><button class="icon-button small" id="add-calendar" aria-label="הוספת לוח שנה" title="הוספת לוח שנה">＋</button></div>
+          <div id="calendar-filters" class="calendar-filters"></div>
+        </div>
+
+        <div class="sidebar-bottom">
+          <div class="tip-card">
+            <span class="tip-sparkle">✳</span>
+            <p>דברים טובים<br />קורים בזמן שלהם.</p>
+            <span class="tip-caption">תני לזמנית לזכור בשבילך</span>
+          </div>
+          <button class="nav-link install-button" id="install-app" hidden><span class="nav-icon">↓</span>התקנת האפליקציה</button>
+          <div class="sidebar-footer"><span class="online-dot"></span>היומן שלך, תמיד איתך</div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="mobile-brand brand">
+            <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="4" y="7" width="24" height="21" rx="7" fill="currentColor" opacity=".14"/><path d="M10 4v6M22 4v6M5 13h22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m12.5 20 2.4 2.4 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="brand-name">זמנית<span class="brand-period">.</span></span>
+          </div>
+          <div class="topbar-date" id="today-label"></div>
+          <div class="topbar-actions">
+            <button class="icon-button notification-button" id="notification-button" aria-label="הפעלת התראות" title="הפעלת התראות">♧<span class="notification-dot" id="notification-dot"></span></button>
+            <button class="primary-button top-add" id="new-event-top"><span>＋</span> אירוע חדש</button>
+          </div>
+        </header>
+
+        <div class="page-container">
+          <section class="welcome-row">
+            <div>
+              <div class="eyebrow" id="greeting">קצת סדר, הרבה שקט</div>
+              <h1 id="page-title">האירועים שלי<span class="title-period">.</span></h1>
+              <p class="page-subtitle" id="page-subtitle">כל מה שחשוב לך, במקום אחד.</p>
+            </div>
+            <button class="primary-button welcome-add" id="new-event-main"><span>＋</span> הוספת אירוע</button>
+          </section>
+
+          <section class="overview-grid" aria-label="סקירה">
+            <article class="overview-card overview-total">
+              <div class="overview-icon lilac">✳</div>
+              <div><div class="overview-label">אירועים בסך הכול</div><div class="overview-value" id="stat-total">0</div></div>
+              <span class="overview-ornament">✳</span>
+            </article>
+            <article class="overview-card">
+              <div class="overview-icon peach">◷</div>
+              <div><div class="overview-label">האירוע הבא</div><div class="overview-value next-value" id="stat-next">עוד אין אירועים</div></div>
+            </article>
+            <article class="overview-card">
+              <div class="overview-icon mint">♡</div>
+              <div><div class="overview-label">החודש הקרוב</div><div class="overview-value" id="stat-month">0 אירועים</div></div>
+            </article>
+          </section>
+
+          <section class="content-card">
+            <div class="content-toolbar">
+              <div class="view-switch" role="tablist" aria-label="תצוגת אירועים">
+                <button class="view-tab active" role="tab" aria-selected="true" data-view="list"><span>☷</span> רשימה</button>
+                <button class="view-tab" role="tab" aria-selected="false" data-view="calendar"><span>▦</span> לוח שנה</button>
+              </div>
+              <div class="toolbar-tools">
+                <label class="search-box"><span aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="חיפוש אירוע..." aria-label="חיפוש אירוע" /></label>
+                <button class="filter-button" id="sort-button">הקרובים קודם <span>⌄</span></button>
+              </div>
+            </div>
+            <div class="active-filter" id="active-filter" hidden></div>
+            <div id="events-view"></div>
+          </section>
+
+          <footer class="page-footer"><span>נבנה בשביל הרגעים שחשוב לזכור</span><span>✳</span></footer>
+        </div>
+      </main>
+    </div>
+    <nav class="mobile-nav" aria-label="ניווט ראשי">
+      <button class="mobile-nav-link active" data-view="list"><span>▤</span>אירועים</button>
+      <button class="mobile-nav-link" data-view="calendar"><span>▦</span>לוח שנה</button>
+      <button class="mobile-nav-link" data-view="upcoming"><span>◷</span>בקרוב</button>
+      <button class="mobile-nav-link" id="mobile-add"><span>＋</span>חדש</button>
+    </nav>
+    <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
+
+    <dialog id="event-dialog" class="modal">
+      <form id="event-form" novalidate>
+        <div class="modal-header">
+          <div><div class="eyebrow">משהו טוב בדרך</div><h2 id="form-title">אירוע חדש<span class="title-period">.</span></h2></div>
+          <button type="button" class="icon-button close-button" data-close aria-label="סגירה">×</button>
+        </div>
+        <label class="field-label" for="event-name">איך קוראים לאירוע?</label>
+        <input class="text-input" id="event-name" name="name" maxlength="80" placeholder="למשל, יום הולדת לאמא" required autocomplete="off" />
+
+        <div class="date-fields">
+          <span class="field-label">תאריך עברי</span>
+          <div class="hebrew-date-row">
+            <select class="text-input" id="hebrew-day" aria-label="יום עברי"></select>
+            <select class="text-input" id="hebrew-month" aria-label="חודש עברי"></select>
+            <input class="text-input hebrew-year" id="hebrew-year" type="text" inputmode="text" maxlength="10" aria-label="שנה עברית" />
+          </div>
+          <div class="date-hint">השנה מוצגת באותיות עבריות, למשל תשפ״ז.</div>
+        </div>
+
+        <div class="field-row">
+          <div class="field-column">
+            <label class="field-label" for="event-calendar">לשייך ללוח</label>
+            <select class="text-input" id="event-calendar" name="calendar"></select>
+          </div>
+          <div class="field-column">
+            <label class="field-label" for="event-color">צבע</label>
+            <select class="text-input" id="event-color" name="color">
+              <option value="lavender">סגול עדין</option><option value="coral">קורל</option><option value="sage">ירוק מרווה</option><option value="blue">כחול</option><option value="gold">זהב</option>
+            </select>
+          </div>
+        </div>
+        <label class="field-label" for="event-reminder">מתי להזכיר לי?</label>
+        <select class="text-input" id="event-reminder" name="reminder">
+          <option value="0">בלי תזכורת</option><option value="60">שעה לפני</option><option value="1440">יום לפני</option><option value="10080">שבוע לפני</option><option value="43200">חודש לפני</option>
+        </select>
+        <div class="date-hint">כדי לקבל תזכורת בזמן, השאירי את האפליקציה פתוחה. אין כרגע התראות רקע כשהיא סגורה.</div>
+        <label class="field-label" for="event-notes">הערה קטנה <span class="optional-label">לא חובה</span></label>
+        <textarea class="text-input notes-input" id="event-notes" name="notes" maxlength="500" rows="2" placeholder="מקום, שעה או כל דבר שכדאי לזכור..."></textarea>
+        <p class="form-error" id="form-error" aria-live="polite"></p>
+        <div class="modal-actions"><button class="text-button delete-event-button" id="delete-event" type="button" hidden>מחיקת האירוע</button><span class="action-spacer"></span><button class="secondary-button" type="button" data-close>ביטול</button><button class="primary-button" type="submit">שמירת האירוע <span>←</span></button></div>
+      </form>
+    </dialog>
+
+    <dialog id="calendar-dialog" class="modal small-modal">
+      <form id="calendar-form">
+        <div class="modal-header"><div><div class="eyebrow">עוד מקום לתכנן בו</div><h2>לוח חדש<span class="title-period">.</span></h2></div><button type="button" class="icon-button close-button" data-close aria-label="סגירה">×</button></div>
+        <label class="field-label" for="calendar-name">שם הלוח</label>
+        <input class="text-input" id="calendar-name" maxlength="32" placeholder="למשל, משפחה" required />
+        <label class="field-label" for="calendar-color">צבע הלוח</label>
+        <select class="text-input" id="calendar-color"><option value="lavender">סגול עדין</option><option value="coral">קורל</option><option value="sage">ירוק מרווה</option><option value="blue">כחול</option><option value="gold">זהב</option></select>
+        <p class="form-error" id="calendar-error" aria-live="polite"></p>
+        <div class="modal-actions"><span class="action-spacer"></span><button class="secondary-button" type="button" data-close>ביטול</button><button class="primary-button" type="submit">יצירת לוח <span>←</span></button></div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

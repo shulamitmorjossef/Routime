@@ -1,0 +1,17 @@
+{
+  "name": "zmanit",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host localhost --port 8000 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@internationalized/date": "^3.12.4"
+  },
+  "devDependencies": {
+    "vite": "^8.3.5"
+  }
+}
