@@ -30,11 +30,19 @@ function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!saved || !Array.isArray(saved.calendars) || !Array.isArray(saved.events)) return fallback;
-    return { calendars: saved.calendars, events: saved.events, notified: Array.isArray(saved.notified) ? saved.notified : [] };
+    return { calendars: saved.calendars, events: saved.events.map(migrateEvent), notified: Array.isArray(saved.notified) ? saved.notified : [] };
   } catch (error) {
     console.error("Could not read saved events.", error);
     return fallback;
   }
+}
+
+function migrateEvent(event) {
+  if (event.hebrewMonth && event.hebrewDay) return { repeatYearly: false, ...event };
+  if (!event.dateISO) return event;
+  const parts = hebrewParts(utcDateForISO(event.dateISO));
+  const { dateISO, notified, ...rest } = event;
+  return { ...rest, hebrewYear: parts.year, hebrewMonth: parts.month, hebrewDay: parts.day, repeatYearly: false };
 }
 
 function saveState() {
@@ -149,9 +157,60 @@ function currentHebrewDate() {
   return { year: hebrewDate.year, month: hebrewDate.month, day: hebrewDate.day };
 }
 
+function isHebrewLeapYear(year) {
+  return HEBREW_CALENDAR.getMonthsInYear(new CalendarDate(HEBREW_CALENDAR, year, 1, 1)) === 13;
+}
+
+function adjustHebrewMonth(originalMonth, originalYear, targetYear) {
+  const originalLeap = isHebrewLeapYear(originalYear);
+  const targetLeap = isHebrewLeapYear(targetYear);
+  if (originalLeap === targetLeap) return originalMonth;
+  if (originalLeap && !targetLeap) {
+    if (originalMonth === 6 || originalMonth === 7) return 6;
+    if (originalMonth > 7) return originalMonth - 1;
+    return originalMonth;
+  }
+  if (originalMonth === 6) return 7;
+  if (originalMonth > 6) return originalMonth + 1;
+  return originalMonth;
+}
+
+function occurrenceDate(event, hebrewYear) {
+  const month = adjustHebrewMonth(event.hebrewMonth, event.hebrewYear, hebrewYear);
+  const monthsInYear = hebrewMonthOptions(hebrewYear);
+  if (!monthsInYear.includes(month)) return null;
+  const firstDay = new CalendarDate(HEBREW_CALENDAR, hebrewYear, month, 1);
+  const daysInMonth = HEBREW_CALENDAR.getDaysInMonth(firstDay);
+  const day = Math.min(event.hebrewDay, daysInMonth);
+  return findGregorianDate(hebrewYear, month, day);
+}
+
+function nextOccurrenceDate(event) {
+  if (!event.repeatYearly) return occurrenceDate(event, event.hebrewYear);
+  const todayIso = toISO(new Date());
+  const today = currentHebrewDate();
+  for (let offset = 0; offset <= 2; offset += 1) {
+    const date = occurrenceDate(event, today.year + offset);
+    if (date && utcDateToISO(date) >= todayIso) return date;
+  }
+  return occurrenceDate(event, today.year);
+}
+
+function nextOccurrenceISO(event) {
+  const date = nextOccurrenceDate(event);
+  return date ? utcDateToISO(date) : null;
+}
+
+function occurrenceISOInYear(event, hebrewYear) {
+  if (!event.repeatYearly && event.hebrewYear !== hebrewYear) return null;
+  const date = occurrenceDate(event, hebrewYear);
+  return date ? utcDateToISO(date) : null;
+}
+
 function dateLabel(event) {
-  const parts = hebrewParts(utcDateForISO(event.dateISO));
-  return `${hebrewNumber(parts.day)} ב${hebrewMonthName(parts.month, parts.year)}, ${hebrewNumber(parts.year, true)}`;
+  const monthName = hebrewMonthName(event.hebrewMonth, event.hebrewYear);
+  if (event.repeatYearly) return `${hebrewNumber(event.hebrewDay)} ב${monthName} · כל שנה`;
+  return `${hebrewNumber(event.hebrewDay)} ב${monthName}, ${hebrewNumber(event.hebrewYear, true)}`;
 }
 
 function daysUntil(date) {
@@ -184,7 +243,13 @@ function reminderLabel(minutes) {
 }
 
 function sortEvents(events) {
-  return [...events].sort((a, b) => localDateFromISO(a.dateISO) - localDateFromISO(b.dateISO));
+  return [...events].sort((a, b) => {
+    const aIso = nextOccurrenceISO(a);
+    const bIso = nextOccurrenceISO(b);
+    if (!aIso) return 1;
+    if (!bIso) return -1;
+    return aIso.localeCompare(bIso);
+  });
 }
 
 function showToast(message, isError = false) {
@@ -234,14 +299,18 @@ function filteredEvents() {
   return sortEvents(state.events).filter((event) => {
     const calendarMatch = selectedCalendar === "all" || event.calendarId === selectedCalendar;
     const queryMatch = !query || `${event.name} ${event.notes || ""} ${calendarFor(event).name}`.toLocaleLowerCase("he").includes(query);
-    const upcomingMatch = activeView !== "upcoming" || event.dateISO >= today;
+    const nextIso = nextOccurrenceISO(event);
+    const upcomingMatch = activeView !== "upcoming" || (nextIso && nextIso >= today);
     return calendarMatch && queryMatch && upcomingMatch;
   });
 }
 
 function renderStats() {
   const today = toISO(new Date());
-  const upcoming = sortEvents(state.events.filter((event) => event.dateISO >= today));
+  const upcoming = sortEvents(state.events.filter((event) => {
+    const iso = nextOccurrenceISO(event);
+    return iso && iso >= today;
+  }));
   $("#stat-total").textContent = String(state.events.length);
   $("#event-count").textContent = String(state.events.length);
   $("#stat-next").textContent = upcoming.length ? upcoming[0].name : "עוד אין אירועים";
@@ -249,8 +318,8 @@ function renderStats() {
   const monthStart = findGregorianDate(todayHebrew.year, todayHebrew.month, 1);
   const monthEnd = nextHebrewMonthStart(monthStart, 1);
   const monthCount = upcoming.filter((event) => {
-    const eventDate = utcDateForISO(event.dateISO);
-    return eventDate >= monthStart && eventDate < monthEnd;
+    const date = nextOccurrenceDate(event);
+    return date && date >= monthStart && date < monthEnd;
   }).length;
   $("#stat-month").textContent = `${monthCount} ${monthCount === 1 ? "אירוע" : "אירועים"}`;
   const hebrewToday = currentHebrewDate();
@@ -284,7 +353,9 @@ function renderList(events) {
   }
   const groups = new Map();
   events.forEach((event) => {
-    const date = localDateFromISO(event.dateISO);
+    const iso = nextOccurrenceISO(event);
+    if (!iso) return;
+    const date = localDateFromISO(iso);
     const key = showPastFirst && date < dateOnly(new Date()) ? "אירועים קודמים" : groupTitle(date);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(event);
@@ -304,14 +375,15 @@ function renderList(events) {
 }
 
 function eventRow(event) {
-  const date = localDateFromISO(event.dateISO);
-  const hebrewDate = hebrewParts(utcDateForISO(event.dateISO));
+  const iso = nextOccurrenceISO(event);
+  const date = iso ? localDateFromISO(iso) : new Date();
+  const hebrewDate = iso ? hebrewParts(utcDateForISO(iso)) : { day: event.hebrewDay, month: event.hebrewMonth, year: event.hebrewYear };
   const calendar = calendarFor(event);
   const color = COLORS.includes(event.color) ? event.color : calendar.color;
   return `<article class="event-row" data-event-id="${escapeHTML(event.id)}" tabindex="0" role="button" aria-label="עריכת ${escapeHTML(event.name)}">
     <div class="event-date-badge ${color}"><span class="badge-day">${hebrewNumber(hebrewDate.day)}</span><span class="badge-month">${escapeHTML(hebrewMonthName(hebrewDate.month, hebrewDate.year))}</span></div>
     <div class="event-main"><h3 class="event-title">${escapeHTML(event.name)}</h3><div class="event-meta"><span>${escapeHTML(dateLabel(event))}</span><span>·</span><span class="calendar-tag"><i class="calendar-dot ${calendar.color}"></i>${escapeHTML(calendar.name)}</span>${event.reminder ? `<span class="reminder-tag">· ${reminderLabel(event.reminder)}</span>` : ""}</div></div>
-    <div class="row-trailing">${escapeHTML(relativeDate(date))}<span class="row-arrow">‹</span></div>
+    <div class="row-trailing">${iso ? escapeHTML(relativeDate(date)) : ""}<span class="row-arrow">‹</span></div>
   </article>`;
 }
 
@@ -328,7 +400,7 @@ function renderCalendar(events) {
     if (dayIndex < 0 || dayIndex >= daysInMonth) return '<div class="calendar-day blank" aria-hidden="true"></div>';
     const hebrewDate = new CalendarDate(HEBREW_CALENDAR, monthParts.year, monthParts.month, dayIndex + 1);
     const iso = utcDateToISO(hebrewDate.toDate("UTC"));
-    const matching = events.filter((event) => event.dateISO === iso);
+    const matching = events.filter((event) => occurrenceISOInYear(event, monthParts.year) === iso);
     const day = hebrewDate.day;
     const label = `${hebrewNumber(day)} ב${hebrewMonthName(monthParts.month, monthParts.year)} ${hebrewNumber(monthParts.year, true)}`;
     return `<div class="calendar-day${iso === todayIso ? " today" : ""}" data-calendar-date="${iso}" tabindex="0" role="button" aria-label="${label}${matching.length ? `, ${matching.length} אירועים` : ""}">
@@ -349,7 +421,7 @@ function renderCalendar(events) {
   eventsView.querySelectorAll("[data-calendar-date]").forEach((cell) => {
     const openDate = () => {
       const iso = cell.dataset.calendarDate;
-      const event = events.find((item) => item.dateISO === iso);
+      const event = events.find((item) => occurrenceISOInYear(item, monthParts.year) === iso);
       if (event) openEventForm(event.id);
       else openEventForm(null, iso);
     };
@@ -402,11 +474,15 @@ function openEventForm(id = null, presetISO = null) {
     $("#event-color").value = event.color || "lavender";
     $("#event-reminder").value = String(event.reminder || 0);
     $("#event-notes").value = event.notes || "";
+    $("#event-repeat").checked = !!event.repeatYearly;
   }
   if (!event) {
     $("#event-color").value = calendarFor({ calendarId: $("#event-calendar").value }).color;
+    $("#event-repeat").checked = true;
   }
-  const hdate = event ? hebrewParts(utcDateForISO(event.dateISO)) : presetISO ? hebrewParts(utcDateForISO(presetISO)) : currentHebrewDate();
+  const hdate = event
+    ? { year: event.hebrewYear, month: event.hebrewMonth, day: event.hebrewDay }
+    : presetISO ? hebrewParts(utcDateForISO(presetISO)) : currentHebrewDate();
   $("#hebrew-year").value = hebrewNumber(hdate.year, true);
   populateHebrewMonths(hdate.month, hdate.day);
   eventDialog.showModal();
@@ -457,33 +533,44 @@ function handleEventSubmit(formEvent) {
     $("#hebrew-year").focus();
     return;
   }
-  const date = findGregorianDate(hebrewYear, $("#hebrew-month").value, $("#hebrew-day").value);
+  const hebrewMonth = Number($("#hebrew-month").value);
+  const hebrewDay = Number($("#hebrew-day").value);
+  const date = findGregorianDate(hebrewYear, hebrewMonth, hebrewDay);
   if (!date) {
     error.textContent = "לא הצלחנו למצוא את התאריך העברי הזה. בדקי את היום והחודש.";
     return;
   }
-  const dateISO = utcDateToISO(date);
   const old = editingEventId && state.events.find((item) => item.id === editingEventId);
   const event = {
     id: old?.id || createId(),
     name,
-    dateISO,
+    hebrewYear,
+    hebrewMonth,
+    hebrewDay,
+    repeatYearly: $("#event-repeat").checked,
     dateKind: "hebrew",
     calendarId: $("#event-calendar").value,
     color: $("#event-color").value,
     reminder: Number($("#event-reminder").value),
     notes: $("#event-notes").value.trim(),
-    notified: old?.dateISO === dateISO ? old.notified : false,
   };
   const previousEvents = [...state.events];
-  if (old) state.events = state.events.map((item) => item.id === old.id ? event : item);
-  else state.events.push(event);
+  const previousNotified = [...state.notified];
+  if (old) {
+    state.events = state.events.map((item) => item.id === old.id ? event : item);
+    const anchorChanged = old.hebrewMonth !== hebrewMonth || old.hebrewDay !== hebrewDay || old.hebrewYear !== hebrewYear || old.repeatYearly !== event.repeatYearly;
+    if (anchorChanged) state.notified = state.notified.filter((id) => !id.startsWith(`${old.id}:`));
+  } else {
+    state.events.push(event);
+  }
   if (!saveState()) {
     state.events = previousEvents;
+    state.notified = previousNotified;
     return;
   }
-  const savedDate = hebrewParts(utcDateForISO(event.dateISO));
-  visibleMonth = findGregorianDate(savedDate.year, savedDate.month, 1);
+  const anchorIso = nextOccurrenceISO(event);
+  const anchor = anchorIso ? hebrewParts(utcDateForISO(anchorIso)) : { year: hebrewYear, month: hebrewMonth };
+  visibleMonth = findGregorianDate(anchor.year, anchor.month, 1);
   if (selectedCalendar !== "all" && selectedCalendar !== event.calendarId) {
     selectedCalendar = event.calendarId;
   }
@@ -543,11 +630,14 @@ function checkReminders() {
   let changed = false;
   state.events.forEach((event) => {
     if (!event.reminder) return;
-    const reminderId = `${event.id}:${event.dateISO}:${event.reminder}`;
-    const reminderAt = localDateFromISO(event.dateISO).getTime() - Number(event.reminder) * 60000;
-    if (now >= reminderAt && now < localDateFromISO(event.dateISO).getTime() + 86400000 && !state.notified.includes(reminderId)) {
+    const iso = nextOccurrenceISO(event);
+    if (!iso) return;
+    const occurrenceHebrewYear = hebrewParts(utcDateForISO(iso)).year;
+    const reminderId = `${event.id}:${occurrenceHebrewYear}:${event.reminder}`;
+    const reminderAt = localDateFromISO(iso).getTime() - Number(event.reminder) * 60000;
+    if (now >= reminderAt && now < localDateFromISO(iso).getTime() + 86400000 && !state.notified.includes(reminderId)) {
       try {
-        const date = localDateFromISO(event.dateISO);
+        const date = localDateFromISO(iso);
         const notification = new Notification(`מתקרב: ${event.name}`, {
           body: `${relativeDate(date)} · ${dateLabel(event)}`,
           icon: "icon.svg",

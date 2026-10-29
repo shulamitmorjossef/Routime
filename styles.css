@@ -182,6 +182,8 @@ h2 { margin-bottom: 0; font-size: 23px; letter-spacing: -.5px; }
 .hebrew-date-row .text-input { min-width: 0; }
 .hebrew-year { text-align: center; }
 .date-hint { margin-top: 5px; color: #aaa7b2; font-size: 9px; }
+.repeat-toggle { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-size: 11px; color: #5a5664; cursor: pointer; }
+.repeat-toggle input { width: 16px; height: 16px; accent-color: #a899d6; cursor: pointer; }
 .optional-label { color: #aaa7b2; font-weight: 400; }
 .notes-input { min-height: 58px; resize: vertical; }
 .form-error { min-height: 0; margin: 7px 0 0; color: #b05249; font-size: 10px; }
