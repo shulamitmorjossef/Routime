@@ -3,19 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#faf9f6" />
+    <meta name="theme-color" content="#173b75" />
     <meta name="description" content="כל האירועים שלך, במקום אחד. לוח שנה אישי עם תזכורות." />
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <title>זמנית — לוח השנה שלך</title>
+    <link rel="icon" href="icon-192.png" type="image/png" />
+    <title>Routime — לוח השנה שלך</title>
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar" aria-label="ניווט ראשי">
-        <a class="brand" href="#" aria-label="זמנית — עמוד הבית">
-          <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="4" y="7" width="24" height="21" rx="7" fill="currentColor" opacity=".14"/><path d="M10 4v6M22 4v6M5 13h22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m12.5 20 2.4 2.4 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-          <span class="brand-name">זמנית<span class="brand-period">.</span></span>
-        </a>
+      <aside class="sidebar" id="sidebar" aria-label="ניווט ראשי">
+        <button class="nav-link install-button" id="install-app" type="button"><span class="nav-icon">↓</span>התקנת האפליקציה</button>
 
         <div class="sidebar-section">
           <div class="section-label">התכנון שלי</div>
@@ -30,22 +27,17 @@
         </div>
 
         <div class="sidebar-bottom">
-          <div class="tip-card">
-            <span class="tip-sparkle">✳</span>
-            <p>דברים טובים<br />קורים בזמן שלהם.</p>
-            <span class="tip-caption">תני לזמנית לזכור בשבילך</span>
-          </div>
-          <button class="nav-link install-button" id="install-app" hidden><span class="nav-icon">↓</span>התקנת האפליקציה</button>
           <div class="sidebar-footer"><span class="online-dot"></span>היומן שלך, תמיד איתך</div>
         </div>
       </aside>
+      <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="סגירת תפריט" hidden></button>
 
       <main class="main-content">
         <header class="topbar">
-          <div class="mobile-brand brand">
-            <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="4" y="7" width="24" height="21" rx="7" fill="currentColor" opacity=".14"/><path d="M10 4v6M22 4v6M5 13h22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m12.5 20 2.4 2.4 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-            <span class="brand-name">זמנית<span class="brand-period">.</span></span>
-          </div>
+          <button class="topbar-brand brand" id="sidebar-toggle" type="button" aria-controls="sidebar" aria-expanded="false" aria-label="פתיחת תפריט Routime" title="פתיחת תפריט">
+            <span class="brand-mark" aria-hidden="true"><img src="brand-mark.png" alt="" /></span>
+            <span class="brand-name">Routime</span>
+          </button>
           <div class="topbar-date" id="today-label"></div>
           <div class="topbar-actions">
             <button class="icon-button notification-button" id="notification-button" aria-label="הפעלת התראות" title="הפעלת התראות">♧<span class="notification-dot" id="notification-dot"></span></button>
@@ -60,7 +52,6 @@
               <h1 id="page-title">האירועים שלי<span class="title-period">.</span></h1>
               <p class="page-subtitle" id="page-subtitle">כל מה שחשוב לך, במקום אחד.</p>
             </div>
-            <button class="primary-button welcome-add" id="new-event-main"><span>＋</span> הוספת אירוע</button>
           </section>
 
           <section class="overview-grid" aria-label="סקירה">
@@ -87,14 +78,13 @@
               </div>
               <div class="toolbar-tools">
                 <label class="search-box"><span aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="חיפוש אירוע..." aria-label="חיפוש אירוע" /></label>
-                <button class="filter-button" id="sort-button">הקרובים קודם <span>⌄</span></button>
               </div>
             </div>
             <div class="active-filter" id="active-filter" hidden></div>
             <div id="events-view"></div>
           </section>
 
-          <footer class="page-footer"><span>נבנה בשביל הרגעים שחשוב לזכור</span><span>✳</span></footer>
+          <footer class="page-footer"><span>נבנה בשביל הרגעים שחשוב לזכור</span><span></span></footer>
         </div>
       </main>
     </div>
@@ -102,7 +92,6 @@
       <button class="mobile-nav-link active" data-view="list"><span>▤</span>אירועים</button>
       <button class="mobile-nav-link" data-view="calendar"><span>▦</span>לוח שנה</button>
       <button class="mobile-nav-link" data-view="upcoming"><span>◷</span>בקרוב</button>
-      <button class="mobile-nav-link" id="mobile-add"><span>＋</span>חדש</button>
     </nav>
     <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
 

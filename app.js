@@ -12,6 +12,8 @@ let activeView = "list";
 let selectedCalendar = "all";
 let editingEventId = null;
 let visibleMonth = null;
+let eventFormHebrewYear = null;
+let sidebarOpen = window.matchMedia("(min-width: 761px)").matches;
 let showPastFirst = false;
 let installPrompt = null;
 let toastTimer;
@@ -176,6 +178,7 @@ function adjustHebrewMonth(originalMonth, originalYear, targetYear) {
 }
 
 function occurrenceDate(event, hebrewYear) {
+  if (hebrewYear < event.hebrewYear) return null;
   const month = adjustHebrewMonth(event.hebrewMonth, event.hebrewYear, hebrewYear);
   const monthsInYear = hebrewMonthOptions(hebrewYear);
   if (!monthsInYear.includes(month)) return null;
@@ -189,11 +192,12 @@ function nextOccurrenceDate(event) {
   if (!event.repeatYearly) return occurrenceDate(event, event.hebrewYear);
   const todayIso = toISO(new Date());
   const today = currentHebrewDate();
+  const firstPossibleYear = Math.max(today.year, event.hebrewYear);
   for (let offset = 0; offset <= 2; offset += 1) {
-    const date = occurrenceDate(event, today.year + offset);
+    const date = occurrenceDate(event, firstPossibleYear + offset);
     if (date && utcDateToISO(date) >= todayIso) return date;
   }
-  return occurrenceDate(event, today.year);
+  return null;
 }
 
 function nextOccurrenceISO(event) {
@@ -263,8 +267,19 @@ function showToast(message, isError = false) {
   toastTimer = setTimeout(() => toast.remove(), 3600);
 }
 
+function setSidebarOpen(open) {
+  sidebarOpen = open;
+  const shell = $(".app-shell");
+  shell.classList.toggle("sidebar-collapsed", !open);
+  $("#sidebar-toggle").setAttribute("aria-expanded", String(open));
+  $("#sidebar-toggle").setAttribute("aria-label", open ? "סגירת תפריט" : "פתיחת תפריט");
+  $("#sidebar").inert = !open;
+  $("#sidebar-backdrop").hidden = !open || !window.matchMedia("(max-width: 760px)").matches;
+}
+
 function setView(view) {
   activeView = view;
+  if (window.matchMedia("(max-width: 760px)").matches) setSidebarOpen(false);
   document.querySelectorAll("[data-view]").forEach((button) => {
     const isActive = button.dataset.view === view;
     button.classList.toggle("active", isActive);
@@ -346,9 +361,7 @@ function renderList(events) {
     const searched = $("#search-input").value.trim();
     const heading = searched ? "לא מצאנו אירועים כאלה" : activeView === "upcoming" ? "אין אירועים באופק" : "היומן שלך מתחיל כאן";
     const text = searched ? "נסי לחפש בשם אחר או להסיר את החיפוש." : activeView === "upcoming" ? "כשתוסיפי אירועים, הם יופיעו כאן." : "ימי הולדת, פגישות, חגים וכל רגע שתרצי לזכור — כולם מחכים למקום משלהם.";
-    eventsView.innerHTML = `<div class="empty-state"><div class="empty-illustration">✳</div><h3>${heading}</h3><p>${text}</p>${searched ? "" : '<button class="primary-button" data-empty-add>＋ הוספת אירוע ראשון</button>'}</div>`;
-    const button = eventsView.querySelector("[data-empty-add]");
-    if (button) button.addEventListener("click", () => openEventForm());
+    eventsView.innerHTML = `<div class="empty-state"><div class="empty-illustration">✳</div><h3>${heading}</h3><p>${text}</p></div>`;
     return;
   }
   const groups = new Map();
@@ -409,8 +422,25 @@ function renderCalendar(events) {
     </div>`;
   }).join("");
   const calendars = selectedCalendar === "all" ? state.calendars : state.calendars.filter((calendar) => calendar.id === selectedCalendar);
+  const monthOptions = hebrewMonthOptions(monthParts.year).map((month) => `<option value="${month}"${month === monthParts.month ? " selected" : ""}>${escapeHTML(hebrewMonthName(month, monthParts.year))}</option>`).join("");
+  const yearOptions = Array.from({ length: 201 }, (_, index) => 5700 + index)
+    .map((year) => `<option value="${year}"${year === monthParts.year ? " selected" : ""}>${hebrewNumber(year, true)}</option>`).join("");
   eventsView.className = "calendar-view";
-  eventsView.innerHTML = `<div class="calendar-month-toolbar"><div class="calendar-month-title">${hebrewMonthLabel(visibleMonth)}</div><div class="month-nav"><button data-month-prev aria-label="חודש קודם">›</button><button class="today-button" data-month-today>היום</button><button data-month-next aria-label="חודש הבא">‹</button></div></div><div class="calendar-grid">${weekdays.map((day) => `<div class="weekday">${day}</div>`).join("")}${days}</div><div class="calendar-legend">${calendars.map((calendar) => `<span class="legend-item"><i class="legend-dot ${calendar.color}"></i>${escapeHTML(calendar.name)}</span>`).join("")}</div>`;
+  eventsView.innerHTML = `<div class="calendar-month-toolbar"><div class="calendar-date-jump" aria-label="בחירת תאריך בלוח">
+    <label>חודש<select data-calendar-month aria-label="בחירת חודש">${monthOptions}</select></label>
+    <label>שנה<select data-calendar-year aria-label="בחירת שנה">${yearOptions}</select></label>
+  </div><div class="month-nav"><button data-month-prev aria-label="חודש קודם">‹</button><button class="today-button" data-month-today>היום</button><button data-month-next aria-label="חודש הבא">›</button></div></div><div class="calendar-grid">${weekdays.map((day) => `<div class="weekday">${day}</div>`).join("")}${days}</div><div class="calendar-legend">${calendars.map((calendar) => `<span class="legend-item"><i class="legend-dot ${calendar.color}"></i>${escapeHTML(calendar.name)}</span>`).join("")}</div>`;
+  eventsView.querySelector("[data-calendar-month]").addEventListener("change", (event) => {
+    const month = Number(event.target.value);
+    visibleMonth = findGregorianDate(monthParts.year, month, 1);
+    render();
+  });
+  eventsView.querySelector("[data-calendar-year]").addEventListener("change", (event) => {
+    const year = Number(event.target.value);
+    const month = adjustHebrewMonth(monthParts.month, monthParts.year, year);
+    visibleMonth = findGregorianDate(year, month, 1);
+    render();
+  });
   eventsView.querySelector("[data-month-prev]").addEventListener("click", () => { visibleMonth = nextHebrewMonthStart(visibleMonth, -1); render(); });
   eventsView.querySelector("[data-month-next]").addEventListener("click", () => { visibleMonth = nextHebrewMonthStart(visibleMonth, 1); render(); });
   eventsView.querySelector("[data-month-today]").addEventListener("click", () => {
@@ -425,7 +455,7 @@ function renderCalendar(events) {
       if (event) openEventForm(event.id);
       else openEventForm(null, iso);
     };
-    cell.addEventListener("dblclick", openDate);
+    cell.addEventListener("click", openDate);
     cell.addEventListener("keydown", (keyEvent) => { if (keyEvent.key === "Enter") openDate(); });
   });
 }
@@ -483,6 +513,7 @@ function openEventForm(id = null, presetISO = null) {
   const hdate = event
     ? { year: event.hebrewYear, month: event.hebrewMonth, day: event.hebrewDay }
     : presetISO ? hebrewParts(utcDateForISO(presetISO)) : currentHebrewDate();
+  eventFormHebrewYear = hdate.year;
   $("#hebrew-year").value = hebrewNumber(hdate.year, true);
   populateHebrewMonths(hdate.month, hdate.day);
   eventDialog.showModal();
@@ -510,7 +541,23 @@ function populateHebrewDays(preferredDay = 1) {
   const count = firstDay ? HEBREW_CALENDAR.getDaysInMonth(firstDay) : 0;
   const days = Array.from({ length: count }, (_, index) => index + 1);
   $("#hebrew-day").replaceChildren(...days.map((day) => new Option(hebrewNumber(day), String(day))));
-  if (days.includes(preferredDay)) $("#hebrew-day").value = String(preferredDay);
+  if (days.length) $("#hebrew-day").value = String(Math.min(Math.max(Number(preferredDay) || 1, 1), count));
+}
+
+function updateEventFormYear() {
+  const year = parseHebrewYear($("#hebrew-year").value);
+  if (!Number.isInteger(year)) return;
+  const currentMonth = Number($("#hebrew-month").value);
+  const currentDay = Number($("#hebrew-day").value);
+  const month = Number.isInteger(eventFormHebrewYear)
+    ? adjustHebrewMonth(currentMonth, eventFormHebrewYear, year)
+    : currentMonth;
+  populateHebrewMonths(month, currentDay);
+  eventFormHebrewYear = year;
+}
+
+function updateEventFormMonth() {
+  populateHebrewDays(Number($("#hebrew-day").value));
 }
 
 function closeDialog(dialog) {
@@ -569,7 +616,7 @@ function handleEventSubmit(formEvent) {
     return;
   }
   const anchorIso = nextOccurrenceISO(event);
-  const anchor = anchorIso ? hebrewParts(utcDateForISO(anchorIso)) : { year: hebrewYear, month: hebrewMonth };
+  const anchor = anchorIso ? hebrewParts(utcDateForISO(anchorIso)) : { year: hebrewYear, month: hebrewMonth, day: hebrewDay };
   visibleMonth = findGregorianDate(anchor.year, anchor.month, 1);
   if (selectedCalendar !== "all" && selectedCalendar !== event.calendarId) {
     selectedCalendar = event.calendarId;
@@ -640,7 +687,7 @@ function checkReminders() {
         const date = localDateFromISO(iso);
         const notification = new Notification(`מתקרב: ${event.name}`, {
           body: `${relativeDate(date)} · ${dateLabel(event)}`,
-          icon: "icon.svg",
+          icon: "icon-192.png",
           tag: reminderId,
         });
         notification.onclick = () => {
@@ -686,25 +733,22 @@ function createCalendar(formEvent) {
   showToast(`הלוח "${name}" נוצר בהצלחה ✳`);
 }
 
-function handleSort() {
-  showPastFirst = !showPastFirst;
-  $("#sort-button").innerHTML = `${showPastFirst ? "הקודמים קודם" : "הקרובים קודם"} <span>⌄</span>`;
-  render();
-}
-
 document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+$("#sidebar-toggle").addEventListener("click", () => setSidebarOpen(!sidebarOpen));
+$("#sidebar-backdrop").addEventListener("click", () => setSidebarOpen(false));
+window.matchMedia("(max-width: 760px)").addEventListener("change", (event) => setSidebarOpen(!event.matches));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && sidebarOpen && !event.target.closest("dialog")) setSidebarOpen(false);
+});
 $("#new-event-top").addEventListener("click", () => openEventForm());
-$("#new-event-main").addEventListener("click", () => openEventForm());
-$("#mobile-add").addEventListener("click", () => openEventForm());
 $("#add-calendar").addEventListener("click", () => { $("#calendar-error").textContent = ""; calendarDialog.showModal(); $("#calendar-name").focus(); });
 $("#event-form").addEventListener("submit", handleEventSubmit);
 $("#calendar-form").addEventListener("submit", createCalendar);
 $("#delete-event").addEventListener("click", deleteEvent);
 $("#notification-button").addEventListener("click", () => enableNotifications(true));
 $("#search-input").addEventListener("input", render);
-$("#sort-button").addEventListener("click", handleSort);
-$("#hebrew-year").addEventListener("input", () => populateHebrewMonths(null, 1));
-$("#hebrew-month").addEventListener("change", () => populateHebrewDays(1));
+$("#hebrew-year").addEventListener("change", updateEventFormYear);
+$("#hebrew-month").addEventListener("change", updateEventFormMonth);
 $("#event-calendar").addEventListener("change", () => { if (!editingEventId) $("#event-color").value = calendarFor({ calendarId: $("#event-calendar").value }).color; });
 document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog"))));
 [eventDialog, calendarDialog].forEach((dialog) => dialog.addEventListener("click", (event) => {
@@ -713,14 +757,47 @@ document.querySelectorAll("[data-close]").forEach((button) => button.addEventLis
 window.addEventListener("beforeinstallprompt", (event) => {
   event.preventDefault();
   installPrompt = event;
-  $("#install-app").hidden = false;
 });
-$("#install-app").addEventListener("click", async () => {
-  if (!installPrompt) return;
-  installPrompt.prompt();
-  await installPrompt.userChoice;
+window.addEventListener("appinstalled", () => {
   installPrompt = null;
   $("#install-app").hidden = true;
+  showToast("Routime הותקנה בהצלחה ✳");
+});
+if (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true) {
+  $("#install-app").hidden = true;
+}
+$("#install-app").addEventListener("click", async () => {
+  if (!installPrompt) {
+    const installed = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+    if (installed) {
+      showToast("Routime כבר מותקנת במכשיר הזה.");
+      return;
+    }
+    const userAgent = navigator.userAgent;
+    if (/iPad|iPhone|iPod/.test(userAgent)) {
+      showToast("כדי להתקין באייפון: פתחי ב‑Safari, לחצי על שיתוף ובחרי ״הוספה למסך הבית״.");
+    } else if (/Android/i.test(userAgent)) {
+      showToast("בתפריט Chrome ‏(⋮) בחרי ״התקנת אפליקציה״ או ״הוספה למסך הבית״.");
+    } else {
+      showToast("בתפריט הדפדפן בחרי ״התקנת Routime״ או ״יצירת קיצור דרך״.");
+    }
+    return;
+  }
+  try {
+    const prompt = installPrompt;
+    installPrompt = null;
+    await prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === "accepted") {
+      $("#install-app").hidden = true;
+      showToast("מתקינים את Routime במכשיר שלך…");
+    } else {
+      showToast("ההתקנה בוטלה. אפשר לנסות שוב דרך התפריט.");
+    }
+  } catch (error) {
+    console.error("Could not install Routime.", error);
+    showToast("לא הצלחנו להתחיל את ההתקנה. נסי להתקין דרך תפריט הדפדפן.", true);
+  }
 });
 window.addEventListener("online", () => showToast("חזרנו לרשת. היומן שלך מעודכן."));
 window.addEventListener("focus", checkReminders);
@@ -738,4 +815,5 @@ if (!("Notification" in window) || Notification.permission !== "granted") {
 }
 const todayHebrew = currentHebrewDate();
 visibleMonth = findGregorianDate(todayHebrew.year, todayHebrew.month, 1);
+setSidebarOpen(sidebarOpen);
 render();
