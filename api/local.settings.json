@@ -1,0 +1,10 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "COSMOS_ENDPOINT": "https://cosmos-routime-s.documents.azure.com:443/",
+    "COSMOS_DATABASE": "routime-s",
+    "COSMOS_CONTAINER": "events"
+  }
+}
